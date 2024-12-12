@@ -1,11 +1,9 @@
-
 import requests
 import pandas as pd
 
 df = pd.read_excel("/Users/ep9k/Downloads/SuperSecretHolidays2024.xlsx")
-df = df.head(10)
 
-def get_authors_from_title(title):
+def get_doi_authors_count_and_affiliations(title, index, total):
     url = "https://api.crossref.org/works"
     params = {"query.title": title, "rows": 1}  # Search for the title and limit results to 1
     try:
@@ -13,56 +11,49 @@ def get_authors_from_title(title):
         response.raise_for_status()  # Check if the request was successful
         data = response.json()
         
-        # Extract author names if available
-        if data["message"]["items"]:
-            authors = data["message"]["items"][0].get("author", [])
-            author_names = [f"{author['family']} {author['given']}" for author in authors]
-            return ", ".join(author_names)
-        else:
-            return "Authors not found for the given title."
-    except requests.exceptions.RequestException as e:
-        return f"An error occurred: {e}"
-
-def get_doi_from_title(title):
-    url = "https://api.crossref.org/works"
-    params = {"query.title": title, "rows": 1}  # Search for the title and limit results to 1
-    try:
-        response = requests.get(url, params=params)
-        response.raise_for_status()  # Check if the request was successful
-        data = response.json()
+        # Progress update
+        print(f"Processing {index + 1}/{total}: '{title}'")
         
-        # print()
-        # print()
-        # print(data)
-        # print()
-        # print()
-        
-        # Extract DOI if available
+        # Extract DOI, authors, affiliations if available
         if data["message"]["items"]:
-            return data["message"]["items"][0]["DOI"]
-            # return data["message"]["items"][0]["author"]
-
+            item = data["message"]["items"][0]
+            doi = item.get("DOI", "DOI not found")
+            
+            authors = item.get("author", [])
+            author_names = [f"{author.get('family', '')} {author.get('given', '')}" for author in authors]
+            author_count = len(authors)
+            author_names_str = ", ".join(author_names) if author_names else "Authors not found"
+            
+            # Extract affiliations for each author
+            affiliations = []
+            for author in authors:
+                if "affiliation" in author and author["affiliation"]:
+                    affiliation_names = [aff["name"] for aff in author["affiliation"]]
+                    affiliations.append("; ".join(affiliation_names))
+                else:
+                    affiliations.append("No affiliation provided")
+            
+            affiliations_str = "; ".join(affiliations)
+            
+            return doi, author_names_str, author_count, affiliations_str
         else:
-            return "DOI not found for the given title."
+            return "DOI not found", "Authors not found", 0, "No affiliation provided"
     except requests.exceptions.RequestException as e:
-        return f"An error occurred: {e}"
+        return f"Error: {e}", f"Error: {e}", 0, f"Error: {e}"
+
+# Add a progress counter
+total_titles = len(df)
+progress_results = []
+
+for idx, title in enumerate(df['Title']):
+    result = get_doi_authors_count_and_affiliations(title, idx, total_titles)
+    progress_results.append(result)
+
+# Update the dataframe with results
+df[['DOI', 'Authors', 'Number of Authors', 'Author Affiliation']] = pd.DataFrame(progress_results)
 
 
-# Add the author names as a new column in the dataframe using apply
-df['authors'] = df['Title'].apply(get_authors_from_title)
+#Export final dataset to Excel
+df.to_excel("/Users/ep9k/Desktop/Zhao_Heng Results v.1.xlsx")
 
-# Add DOI information into the 'DOI' column
-df['DOI'] = df['Title'].apply(get_doi_from_title)
-
-# # Example Usage
-# for title in article_titles:
-#     doi = get_doi_from_title(title)
-#     print(f"DOI for '{title}': {doi}")
-
-
-
-
-
-
-mylist = [1]
 
